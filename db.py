@@ -32,6 +32,13 @@ async def init_db(db_path: str) -> None:
                 FOREIGN KEY (request_id) REFERENCES requests(id)
             )
         """)
+        # Migrate: add league_type column if it doesn't exist yet
+        try:
+            await conn.execute(
+                "ALTER TABLE requests ADD COLUMN league_type TEXT NOT NULL DEFAULT ''"
+            )
+        except Exception:
+            pass  # Column already exists
         await conn.commit()
 
 
@@ -46,6 +53,7 @@ async def create_request(
     time: str,
     team: str,
     note: str | None,
+    league_type: str = "",
 ) -> int:
     now = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(db_path) as conn:
@@ -53,11 +61,11 @@ async def create_request(
             """
             INSERT INTO requests
                 (message_id, channel_id, guild_id, requester_id, requester_name,
-                 date, time, team, note, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 date, time, team, note, league_type, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (message_id, channel_id, guild_id, requester_id, requester_name,
-             date, time, team, note, now),
+             date, time, team, note, league_type, now),
         )
         await conn.commit()
         return cursor.lastrowid
@@ -110,6 +118,17 @@ async def toggle_volunteer(
             )
             await conn.commit()
             return True
+
+
+async def get_open_requests(db_path: str, guild_id: str) -> list[dict]:
+    async with aiosqlite.connect(db_path) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            "SELECT * FROM requests WHERE status = 'OPEN' AND guild_id = ? ORDER BY created_at",
+            (guild_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
 
 
 async def close_request(

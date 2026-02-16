@@ -13,4 +13,6 @@ COPY cogs/ cogs/
 # Mount point for the SQLite volume
 RUN mkdir -p /data
 
+ENV PYTHONUNBUFFERED=1
+
 CMD ["python", "bot.py"]
